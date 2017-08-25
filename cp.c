@@ -83,7 +83,7 @@ void set_charset(int n)
 	cs = uni2cs;
 }
 
-static void print_uni_char(u16 u)
+static void print_uni_char(u16 u, FILE * fp)
 {
 	unsigned v = u;
 	if(v<0x00A0) {
@@ -96,25 +96,25 @@ static void print_uni_char(u16 u)
 	} else {
 		v = v>>6 | 0xC0;
 		if(u >= 0x800) {
-			putchar(u>>12 | 0xE0);
+			fputc(u>>12 | 0xE0, fp);
 			v = v&077 | 0x80;
 		}
-		putchar(v);
+		fputc(v, fp);
 		v = u&077 | 0x80;
 	}
-	putchar(v);
+	fputc(v, fp);
 }
 
-u8 *print_uni(u8 *p, int l, u8 f)
+u8 *print_uni(u8 *p, int l, u8 f, FILE * fp)
 {
 	if(f&1)
 		while(--l >= 0) {
-			print_uni_char(g16(p));
+			print_uni_char(g16(p), fp);
 			p += 2;
 		}
 	else
 		while(--l >= 0)
-			print_uni_char(*p++);
+			print_uni_char(*p++, fp);
 	return p;
 }
 
@@ -170,7 +170,7 @@ void set_codepage(int n)
 	else if(n!=0x16F) warnx("%d: Codepage not supported", n);
 }
 
-u8 *print_cp_str(u8 *p, int l)
+u8 *print_cp_str(u8 *p, int l, FILE * fp)
 {
 	u8 *e = p + l;
 	while(p<e) {
@@ -182,12 +182,12 @@ u8 *print_cp_str(u8 *p, int l)
 				c=' ';
 			}
 		} else if(cp) {
-			print_uni_char(cp[c-0x80]);
+			print_uni_char(cp[c-0x80], fp);
 			continue;
 		} else
 badchar:
 			c = badchar;
-		putchar(c);
+		fputc(c, fp);
 	}
 	return p;
 }

@@ -44,8 +44,8 @@ meml_t get_workbook();
 
 int find_charset(char *name);
 void set_charset(int n);	// output charset
-u8 *print_uni(u8 *p, int l, u8 f);
+u8 *print_uni(u8 *p, int l, u8 f, FILE * fp);
 void set_codepage(int n);	// sheet codepage
-u8 *print_cp_str(u8 *p, int l);
+u8 *print_cp_str(u8 *p, int l, FILE * fp);
 int xls2cvs(char *srcname,char *dstname);
 #endif /* _LIBXLS2CVS_H */

@@ -137,21 +137,21 @@ ok:
 	x.biffv = v;
 }
 
-static u8 *print_str(u8 *p, int l)
+static u8 *print_str(u8 *p, int l, FILE * fp)
 {
 	if(x.biffv < BIFF8) {
-		p = print_cp_str(p, l);
+		p = print_cp_str(p, l, fp);
 	} else {
 		u8 f = *p++;
 		int a=0;
 		if(f&8) {a += 4*g16(p); p += 2;}
 		if(f&4) {a += g32(p); p += 4;}
-		p = a + print_uni(p, l, f);
+		p = a + print_uni(p, l, f, fp);
 	}
 	return p;
 }
 
-static void print_sst(int n)
+static void print_sst(int n, FILE * fp)
 {
 	u8 *p, *re, f;
 	unsigned l;
@@ -175,13 +175,13 @@ static void print_sst(int n)
 		l -= s>>f;
 		if(s&f)
 			BADF("String cut at the middle of a char");
-		print_uni(p, s>>f, f);
+		print_uni(p, s>>f, f, fp);
 
 		p = re + 4;
 		re = p + g16(re+2);
 		f = *p++;
 	}
-	print_uni(p, l, f);
+	print_uni(p, l, f, fp);
 }
 
 static u8 *read_sst(u8 *p, u8 *re, u8 *fe)
@@ -437,16 +437,16 @@ again:
 	return fmt;
 }
 
-static void print_time(int m, int f, double v);
+static void print_time(int m, int f, double v, FILE * fp);
 
 static void
-print_fmt(const u8 *xfp, double v)
+print_fmt(const u8 *xfp, double v, FILE * fp)
 {
 	const struct fmt *f;
 	unsigned xf;
 
 	if (g.nofmt) {
-		printf("%f", v);
+		fprintf(fp, "%f", v);
 		return;
 	}
 
@@ -472,29 +472,29 @@ have_fmt:
 	switch (f->type) {
 	case 0:
 		if (ceil(v) == v) {
-			printf("%.f", v);
+			fprintf(fp, "%.f", v);
 			break;
 		}
 	default:
-		printf("%f", v);
+		fprintf(fp, "%f", v);
 		break;
 	case 1:
-		printf("%.*f", f->arg, v);
+		fprintf(fp, "%.*f", f->arg, v);
 		break;
 	case 2:
-		printf("%.*E", f->arg, v);
+		fprintf(fp, "%.*E", f->arg, v);
 		break;
 	case 3:
 	case 4:
 	case 5:
-		print_time(f->type-2, f->arg, v);
+		print_time(f->type-2, f->arg, v, fp);
 		break;
 	}
 	return;
 }
 
 static void
-print_time(int m, int f, double v)
+print_time(int m, int f, double v, FILE * fp)
 {
 	int d;
 	time_t t;
@@ -512,26 +512,26 @@ print_time(int m, int f, double v)
 	t = d*24*60*60 + (unsigned)(v*24*60*60);
 	tm = gmtime(&t);
 	if (!tm) {
-		printf("#BAD"); // XXX
+		fprintf(fp, "#BAD"); // XXX
 		return;
 	}
 	if (m==3 && !f && !v) {
 		m = 1;
 	}
 	if (m&1) {
-		printf("%04u-%02u-%02u",
+		fprintf(fp, "%04u-%02u-%02u",
 		       tm->tm_year+1900, tm->tm_mon+1, tm->tm_mday);
 		if (m==1) {
 			return;
 		}
-		printf(" ");
+		fprintf(fp, " ");
 	}
-	printf("%2u:%02u:%02u", tm->tm_hour, tm->tm_min, tm->tm_sec);
+	fprintf(fp, "%2u:%02u:%02u", tm->tm_hour, tm->tm_min, tm->tm_sec);
 	return;
 }
 
 static void
-print_rk(const u8 *xfp, u32 rk)
+print_rk(const u8 *xfp, u32 rk, FILE * fp)
 {
 	double v;
 	if (rk & 2) {
@@ -542,7 +542,7 @@ print_rk(const u8 *xfp, u32 rk)
 	if (rk & 1) {
 		v /= 100;
 	}
-	print_fmt(xfp, v);
+	print_fmt(xfp, v, fp);
 	return;
 }
 
@@ -647,7 +647,7 @@ read_init_rr(int o)
 	}
 }
 
-int to_cell(int r, int c)
+int to_cell(int r, int c, FILE * fp)
 {
 	if(r < g.top || r > g.bottom) {
 		g.row = r;
@@ -658,7 +658,7 @@ int to_cell(int r, int c)
 	if(g.row < r) {
 		g.col = 0;
 		do {
-			putchar('\n');
+			fputc('\n', fp);
 			g.row++;
 		} while(g.row < r);
 	}
@@ -669,25 +669,25 @@ int to_cell(int r, int c)
 	if(g.col < g.left)
 		g.col = g.left;
 	while(g.col < c) {
-		putchar('\t');
+		fputc('\t', fp);
 		g.col++;
 	}
 	return 1;
 }
 
-static int to_cell_p(u8 *p) {return to_cell(g16(p), g16(p+2));}
+static int to_cell_p(u8 *p, FILE * fp) {return to_cell(g16(p), g16(p+2), fp);}
 
-static inline int to_nx_cell() {return to_cell(g.row, g.col+1);}
+static inline int to_nx_cell(FILE * fp) {return to_cell(g.row, g.col+1, fp);}
 
-void print_sheet(int o, u8 *name, int nr)
+void print_sheet(int o, u8 *name, int nr,FILE * fp)
 {
 	struct rr rr;
 	u8 pvrec;
 
 	if(g.titles) {
-		if(nr) putchar('\f');
-		if(name) print_str(name+1, *name);
-		putchar('\n');
+		if(nr) fputc('\f', fp);
+		if(name) print_str(name+1, *name, fp);
+		fputc('\n', fp);
 	}
 
 	rr.o = o;
@@ -711,48 +711,48 @@ void print_sheet(int o, u8 *name, int nr)
 			rr.o = skip_substream(rr.o);
 			break;
 		case 0x04: // LABEL
-			if (to_cell_p(p)) {
-				print_str(p+8, x.biffv==BIFF2 ? p[7] : g16(p+6));
+			if (to_cell_p(p, fp)) {
+				print_str(p+8, x.biffv==BIFF2 ? p[7] : g16(p+6), fp);
 			}
 			break;
 		case 0xFD: // LABELSST
-			if (to_cell_p(p)) {
-				print_sst(g32(p+6));
+			if (to_cell_p(p, fp)) {
+				print_sst(g32(p+6), fp);
 			}
 			break;
 		case 0x7E: // RK
-			if (to_cell_p(p)) {
-				print_rk(p+4, g32(p+6));
+			if (to_cell_p(p, fp)) {
+				print_rk(p+4, g32(p+6), fp);
 			}
 			break;
 		case 0xBD: { // MULRK
 				u8 *q = p + rr.l - 11;
-				int f = to_cell_p(p);
+				int f = to_cell_p(p, fp);
 				for(;;) {
 					p += 6;
 					if (f) {
-						print_rk(p-2, g32(p));
+						print_rk(p-2, g32(p), fp);
 					}
 					if (p>=q) {
 						break;
 					}
-					f = to_nx_cell();
+					f = to_nx_cell(fp);
 				}
 			} break;
 		case 0x02: // INTEGER
-			if (to_cell_p(p)) {
-				print_fmt(p+4, g16(p+7));
+			if (to_cell_p(p, fp)) {
+				print_fmt(p+4, g16(p+7), fp);
 			}
 			break;
 		case 0x03: // NUMBER
-			if(!to_cell_p(p)) {
+			if(!to_cell_p(p, fp)) {
 				break;
 			}
 number:
-			print_fmt(p+4, ieee754(g64(x.biffv==BIFF2 ? p+7 : p+6)));
+			print_fmt(p+4, ieee754(g64(x.biffv==BIFF2 ? p+7 : p+6)), fp);
 			break;
 		case 0x06: // FORMULA
-			if(!to_cell_p(p)) {
+			if(!to_cell_p(p, fp)) {
 				pvrec = 0;
 				break;
 			}
@@ -762,17 +762,17 @@ number:
 			}
 			// p[6] == 0: STRING follows
 			if (p[6] == 1) {
-				printf("%s", p[6+2] ? "true" : "false");
+				fprintf(fp, "%s", p[6+2] ? "true" : "false");
 			}
 			break;
 		case 0x07: // STRING
 			if (pvrec==0x06) {
-				print_str(p+2, g16(p));
+				print_str(p+2, g16(p), fp);
 			}
 			break;
 		case 0xD6: // RSTRING
-			if (to_cell_p(p)) {
-				print_str(p+8, g16(p+6));
+			if (to_cell_p(p, fp)) {
+				print_str(p+8, g16(p+6), fp);
 			}
 			break;
 		}
@@ -782,10 +782,10 @@ number:
 			break;
 		}
 	}
-	putchar('\n');
+	fputc('\n', fp);
 }
 
-void print_xls()
+void print_xls(FILE * fp)
 {
 	struct rr rr;
 	int done;
@@ -799,7 +799,7 @@ void print_xls()
 	case 0x10: // single sheet
 		if(g.nr) goto not_found;
 		read_init_rr(rr.o);
-		print_sheet(rr.o, 0, 0);
+		print_sheet(rr.o, 0, 0, fp);
 		return;
 	case 0x100: goto workbook;
 	case 5: goto globals;
@@ -827,7 +827,7 @@ globals:
 			u8 *q;
 			GETRR(q)
 			if(rr.id != 0x09) BADF( );
-			print_sheet(rr.o, p+6, done++);
+			print_sheet(rr.o, p+6, done++, fp);
 			if(!g.all) break;
 		} else if(g.sel)
 			goto not_found;
@@ -873,7 +873,7 @@ found:
 				BADF( )
 			if(g16(p+2) == 0x10) {
 				read_init_rr(rr.o);
-				print_sheet(rr.o, name, done++);
+				print_sheet(rr.o, name, done++, fp);
 				if(!g.all)
 					break;
 			} else if(g.sel)
@@ -894,7 +894,7 @@ not_found:
 		errx(1, "No such sheet");
 }
 
-void list_xls()
+void list_xls(FILE * fp)
 {
 	struct rr rr;
 	u8 *p;
@@ -944,9 +944,9 @@ void list_xls()
 				}
 				q += 6;
 			}
-			printf("%2u. %-8s ", nr++, k);
-			print_str(q+1, q[0]);
-			putchar('\n');
+			fprintf(fp, "%2u. %-8s ", nr++, k);
+			print_str(q+1, q[0], fp);
+			fputc('\n', fp);
 			break;
 		}
 	}
@@ -988,19 +988,27 @@ void parse_range(char *s)
 	errx(1, "unexpected char '%c' in cell range", *s);
 }
 
+void test_print(FILE * fp)
+{
+	fprintf(fp, "%s %s %s %d", "We", "666", "777", 2012);
+}
+
 extern int xls2cvs(char *srcname,char *dstname)
 {
 	char o=0;
 	int rs=0;
 	g.right = g.bottom = 0xFFFF;
 	rs = ole_open(srcname);
+	FILE * fp;
 	if(rs == 1){
 		x.map = get_workbook();
 		x.end = x.map.ptr + x.map.len;
 		check_biffv(x.map.ptr);
-		freopen (dstname,"w",stdout);
-		print_xls();
-		fclose (stdout);
+		fp = fopen (dstname, "w+");
+		//test_print(fp);
+		print_xls(fp);
+		//test_print(fp);
+		fclose(fp);
 		return 1;
 	}
 
